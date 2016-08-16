@@ -19,37 +19,40 @@ class items:
         if len(weight) != len(price):
             print "输入数据个数不匹配"
             return
-        theData=np.array(range(1,len(weight)+1),weight,price).transpose()
-        theData=np.array(theData,dtype=[(idx,"s1"),[weight,int],)
-
         self.weights = weight
         self.prices = price
+        self.idx = np.argsort(weight)
 
     def getWeight(self, index):
         return self.weights[index]
 
     def getPrice(self, index):
         return self.prices[index]
-
+    def getNext(self,index):
+        '''
+        :param index: 第n项
+        :return:按重量排序后的第n项
+        '''
+        return self.idx[index]
 
 class bag:
-    def __init__(self, weight, itemnum,mindelta,maxdelta):
+    def __init__(self, weight, itemnum, mindelta, maxdelta):
         self.totalWeight = weight
         self.totalPrice = 0
         self.weight = 0
         self.items = []  # 选出的物品
-        self.minDelta=mindelta
-        self.maxDelta=maxdelta
-        self.ownStatus=True #是否还能装下任何其他东西
-        self.addStatus=True #是否还能为更大重量的包提供解决方案
+        # self.minDelta = mindelta
+        # self.maxDelta = maxdelta
+        # self.ownStatus = True  # 是否还能装下任何其他东西
+        # self.addStatus = True  # 是否还能为更大重量的包提供解决方案
 
-    def addItem(self, itemidx, items):
+    def addItem(self, itemidx, _items):
         if self.ownStatus:
-            self.weight += items[itemidx].weight
-            self.totalPrice += items[itemidx].price
+            self.weight += _items.getWeight(itemidx)
+            self.totalPrice += _items.getPrice(itemidx)
             self.items.append(itemidx)
-            if self.totalWeight-self.weight<self.minDelta:
-                self.ownStatus=False
+            # if self.totalWeight-self.weight<self.minDelta:
+            #     self.ownStatus=False
 
 
 if __name__ == '__main__':
@@ -59,8 +62,8 @@ if __name__ == '__main__':
     bagWeight = 150
 
     # todo:考虑必要性
-    minWeight = min(iWeight)
-    maxWeight = max(iWeight)
+    # minWeight = min(iWeight)
+    # maxWeight = max(iWeight)
     # python帮我省掉的代码
     # deltaWeight=iWeight[0]
     # for ii in range(len(iWeight)-1):
@@ -76,7 +79,7 @@ if __name__ == '__main__':
 
     # 生成系列bag
     bags = []
-    for round in range(deltaWeight, bagWeight+1, deltaWeight):
+    for round in range(deltaWeight, bagWeight + 1, deltaWeight):
         tempBag = bag(round, len(iWeight))
 
     # 包内的第ii件物品(第ii轮)
@@ -85,7 +88,7 @@ if __name__ == '__main__':
         # todo:去啰嗦？
         if round == 1:
             for bg in bags:
-                tempIdx=-1
+                tempIdx = -1
                 # todo:这里没写完
                 for itemIdx in range(len(items)):
                     if bg.weight + items[itemIdx] < bg.totalweight:
@@ -99,7 +102,4 @@ if __name__ == '__main__':
         else:
             for bgIdx in range(len(bags)):
                 if not bg.bags[bgIdx].ownStatus:
-                    tempIdx = [(-1,-1)]  # 存储待选项(背包号，物品号)
-
-
-
+                    tempIdx = [(-1, -1)]  # 存储待选项(背包号，物品号)
