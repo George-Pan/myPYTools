@@ -10,6 +10,8 @@ __author__ = 'Administrator'
 在写时修正的想法
 1. 取消设置因重量而无法添加的项
 * 原因：第二轮是在第一轮的基础上此时第一轮的排除项无意义
+# 保留ownStatus
+#
 
 '''
 
@@ -22,37 +24,67 @@ class items:
         self.weights = weight
         self.prices = price
         self.idx = np.argsort(weight)
+        self.sum = len(weight)  # 数据个数
+        # todo:合理性？
+        tWeight = np.array(self.weights)[self.idx]
+        self.delta=min(tWeight[1:]-tWeight[:-1])
 
     def getWeight(self, index):
         return self.weights[index]
 
     def getPrice(self, index):
         return self.prices[index]
-    def getNext(self,index):
+
+    # todo:换个合适的名称？
+    def getNext(self, index):
         '''
         :param index: 第n项
         :return:按重量排序后的第n项
         '''
         return self.idx[index]
 
+
 class bag:
-    def __init__(self, weight, itemnum, mindelta, maxdelta):
+    def __init__(self, weight, itemnum):
         self.totalWeight = weight
         self.totalPrice = 0
         self.weight = 0
         self.items = []  # 选出的物品
-        # self.minDelta = mindelta
-        # self.maxDelta = maxdelta
-        # self.ownStatus = True  # 是否还能装下任何其他东西
-        # self.addStatus = True  # 是否还能为更大重量的包提供解决方案
+        self._ownStatus = True
+        # 注意：这个范围一定大于最精确的筛选范围，且一直在减小
+        self._selectable = range(itemnum)
 
-    def addItem(self, itemidx, _items):
-        if self.ownStatus:
-            self.weight += _items.getWeight(itemidx)
-            self.totalPrice += _items.getPrice(itemidx)
+    def addItem(self, itemidx, weight, price):
+        if self._ownStatus:
+            self.weight += weight
+            self.totalPrice += price
             self.items.append(itemidx)
-            # if self.totalWeight-self.weight<self.minDelta:
-            #     self.ownStatus=False
+            self.deleteselectable(itemidx)
+            # 判断是否装满
+            if self.weight == self.totalWeight or len(self._selectable) == 0:
+                self._ownStatus = False
+
+    def deleteselectable(self, index):
+        self._selectable.remove(index)
+
+
+def comapreitems(bag, items):
+    '''
+    :param bags:bag类的集合
+    :param items: items类
+    :return:满足重量要求的最贵的物品的编号
+    '''
+    tIdx = -1
+    for itemIdx in items.idx:
+        if bag.weight + items.getWeight(itemIdx) <= bag.totalWeight:
+            if tIdx == -1:
+                tIdx = itemIdx
+            else:
+                if items.getPrice(tIdx) < items.getPrice(itemIdx):
+                    tIdx = itemIdx
+        else:
+            bag.deleteselectable(itemIdx)
+    return tIdx
 
 
 if __name__ == '__main__':
@@ -61,45 +93,24 @@ if __name__ == '__main__':
     iPrice = [10, 40, 30, 50, 35, 40, 30]
     bagWeight = 150
 
-    # todo:考虑必要性
-    # minWeight = min(iWeight)
-    # maxWeight = max(iWeight)
-    # python帮我省掉的代码
-    # deltaWeight=iWeight[0]
-    # for ii in range(len(iWeight)-1):
-    #     if iWeight[ii]>iWeight[ii+1]:
-    #         deltaWeight=iWeight[ii+1]
-
-    # todo: 计算最小的Δw
-    # deltaWeight=min(iWeight) #如果10，12，20，21，22会有影响?
-    deltaWeight = 5
-
-    # 生成系列item
+    # 生成items&系列bag
     objs = items(iWeight, iPrice)
-
-    # 生成系列bag
     bags = []
-    for round in range(deltaWeight, bagWeight + 1, deltaWeight):
-        tempBag = bag(round, len(iWeight))
+    for r in range(objs.getWeight(objs.getNext(0)), bagWeight + 1, objs.delta):
+        bags.append(bag(r, objs.sum))
 
     # 包内的第ii件物品(第ii轮)
-    for round in range(1, len(items)):
+    for r in range(0, objs.sum):
         # 第一轮，不需要和前一轮做比较
-        # todo:去啰嗦？
-        if round == 1:
+        if r == 0:
             for bg in bags:
-                tempIdx = -1
-                # todo:这里没写完
-                for itemIdx in range(len(items)):
-                    if bg.weight + items[itemIdx] < bg.totalweight:
-                        if tempIdx == -1:
-                            tempIdx = itemIdx
-                        else:
-                            if objs.getPrice(tempIdx) < items[itemIdx].price:
-                                tempIdx = itemIdx
+                tempIdx = comapreitems(bg, objs)
                 if tempIdx != -1:
-                    bg.additem(tempIdx, items)
+                    bg.addItem(tempIdx, objs.getWeight(tempIdx), objs.getPrice(tempIdx))
         else:
-            for bgIdx in range(len(bags)):
-                if not bg.bags[bgIdx].ownStatus:
-                    tempIdx = [(-1, -1)]  # 存储待选项(背包号，物品号)
+            bagToFill = range(len(bags))  # 还未装满的
+            bagForFill = range(len(bags))  # 可能成为装满其他包的解决方案的包
+            for bg in bags:
+                tempIdx = []
+
+                tempIdx = [(-1, -1)]  # 存储待选项(背包号，物品号)
