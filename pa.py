@@ -15,10 +15,23 @@ __author__ = 'Administrator'
 # 保留ownStatus
 # 再次内移selectable：每个
 3.新增bgIdx
+8/17
+* 重新调整变量名等，以符合python规范
+* 去除所有private变量：算法，装什么OO逼！
+* bag在更换垫脚石时重新计算selectable：all-items(放大范围，靠下一次循环缩小)
+* 经验：作为循环范围的列表不能在循环内发生变化
+* 经验：python内一层冒号一个作用域
+* 修正173行开始的tempIdxArray错误：应在循环内找到最大值再赋值，而不是直接赋值
+* 修正每一行内包有满足的条件就立即放入：之后的包循环时，包内物品数量超过轮数（改为轮最后统一加）
+* 修正compare_items_in_bag函数内由于无待选项，而误认“toselect=None”的状态，改为直接返回-1（否决权交给循环完所有可能垫脚石包之后）
+* 现在结果：4,2,6,5,total price 165 → 错误！
+* 经验：条件断点：查找多重循环中的bug的唯一捷径（限制到某一循环）
 '''
+# todo:问题推测：并未在最优结果的基础之上
+# todo:尝试垫脚包只能是满了的包
+# todo:对装不满的包，新增状态排除出循环（且不能作为垫脚包）
 
-
-class items:
+class Items:
     def __init__(self, weight, price):
         if len(weight) != len(price):
             return
@@ -27,106 +40,106 @@ class items:
         self.idx = np.argsort(weight)
         self.sum = len(weight)  # 数据个数
         # todo:合理性？
-        tWeight = np.array(self.weights)[self.idx]
-        self.delta = min(tWeight[1:] - tWeight[:-1])
+        temp_weight = np.array(self.weights)[self.idx]
+        self.delta = min(temp_weight[1:] - temp_weight[:-1])
 
-    def getWeight(self, index):
+    def get_weight(self, index):
         return self.weights[index]
 
-    def getPrice(self, index):
+    def get_price(self, index):
         return self.prices[index]
 
-    # todo:换个合适的名称？
-    def getNext(self, index):
-        '''
+    def get_by_order(self, index):
+        """
         :param index: 第n项
         :return:按重量排序后的第n项
-        '''
+        此处的order指依据重量从小到大排序
+        """
         return self.idx[index]
 
 
-class bag:
+class Bag:
     def __init__(self, weight, itemnum, bgidx):
-        self.totalWeight = weight
-        self.totalPrice = 0
+        self.total_weight = weight
+        self.total_price = 0
         self.weight = 0
-        self.bgidx = bgidx
+        self.bag_idx = bgidx
         self.items = []  # 选出的物品
-        self._ownStatus = True
+        self.is_full = False
+        self.max_item = itemnum
         # 注意：这个范围一定大于最精确的筛选范围，且一直在减小
-        self._selectable = range(itemnum)
-        self.bgselectable = range(self.bgidx)  # 可能作为垫脚石的包的序号
+        self.selectable = range(itemnum)
+        self.bag_selectable = range(self.bag_idx)  # 可能作为垫脚石的包的序号
 
-    def addItem(self, itemidx, weight, price, changedbag=None):
-        if self._ownStatus:
-            if type(changedbag) == "bag":
-                self.weight = changedbag.weight
-                self.items = changedbag.items
-                self.totalPrice = changedbag.totalPrice
+    def add_item(self, item_idx, weight, price, changed_bag=None):
+        if not self.is_full:
+            if type(changed_bag) == "bag":
+                self.weight = changed_bag.weight
+                self.items = changed_bag.items
+                self.total_price = changed_bag.totalPrice
+                self.selectable = range(self.max_item)
+                # 重新放大到除已选中项之外的最大范围
+                # todo:待测试
+                for x in self.items:
+                    self.selectable.remove(x)
             self.weight += weight
-            self.totalPrice += price
-            self.items.append(itemidx)
-            self.deleteselectable(itemidx)
+            self.total_price += price
+            self.items.append(item_idx)
+            self.selectable.remove(item_idx)
             # 判断是否装满
-            if self.weight == self.totalWeight or len(self._selectable) == 0:
-                self._selectable = []  # 统一清零，不然我也不太确定此时的状态
-                self._ownStatus = False
-
-    def deleteselectable(self, index):
-        self._selectable.remove(index)
-
-    def isFull(self):
-        return not self._ownStatus
-
-    def getSelectable(self):
-        return self._selectable
+            if self.weight == self.total_weight or len(self.selectable) == 0:
+                self.selectable = []  # 统一清零，不然我也不太确定此时的状态
+                self.is_full = True
 
 
-def compareitems(bag, items, toselect=None):
-    '''
-    :param bags:bag类的集合
+def compare_items_in_bag(bag, items, toselect=None):
+    """
+    :param bag:bag类
     :param items: items类
     :return:满足重量要求的最贵的物品的编号
-    注意：该方法只适用第一次筛选
-    下并未依据已有的bag.selectablelai
-    '''
-    tIdx = -1
+    注意：该方法只适用对当前包内的筛选
+    """
+    temp_index = -1
     # python 好像没有三元运算符（ext=toselect?toselect:items.idx）
-    if toselect:
-        ext = toselect
+    if type(toselect) == list:
+        if len(toselect) == 0:  # 包没装满但无可选项状态
+            return temp_index
+        else:
+            ext = toselect[:]  # 必须复制！！！！
     else:
         ext = items.idx
     for itemIdx in ext:
-        if bag.weight + items.getWeight(itemIdx) <= bag.totalWeight:
-            if tIdx == -1:
-                tIdx = itemIdx
+        if bag.weight + items.get_weight(itemIdx) <= bag.total_weight:
+            if temp_index == -1:
+                temp_index = itemIdx
             else:
-                if items.getPrice(tIdx) < items.getPrice(itemIdx):  # 不取等号原因：同价值的东西尽量取轻的
-                    tIdx = itemIdx
+                if items.get_price(temp_index) < items.get_price(itemIdx):  # 不取等号原因：同价值的东西尽量取轻的
+                    temp_index = itemIdx
         else:
-            bag.deleteselectable(itemIdx)
-    return tIdx
+            bag.selectable.remove(itemIdx)
+    return temp_index
 
 
-def compareitems2(bag, items, targetbag):
-    '''
-
+def compare_items_among_bags(bag, items, target_bag):
+    """
     :param bag:
     :param items:
-    :param targetbag:
+    :param target_bag:
     :return:
-    '''
+    注意：该方法适用对垫脚石包的筛选
+    """
     # todo:这里不能删元素
     # todo:这里
-    tIdx = -1
-    for itemIdx in targetbag.getSelectable():
-        if bag.weight + items.getWeight(itemIdx) <= targetbag.totalWeight:
-            if tIdx == -1:
-                tIdx = itemIdx
+    temp_index = -1
+    ext = target_bag.selectable[:]  # 必须复制！！！！
+    for itemIdx in ext:
+        if bag.weight + items.get_weight(itemIdx) <= target_bag.total_weight:
+            if temp_index == -1:
+                temp_index = itemIdx
             else:
-                if items.getPrice(tIdx) < items.getPrice(itemIdx):  # 不取等号原因：同价值的东西尽量取轻的
-                    tIdx = itemIdx
-    return tIdx
+                if items.get_price(temp_index) < items.get_price(itemIdx):  # 不取等号原因：同价值的东西尽量取轻的
+                    temp_index = itemIdx
+    return temp_index
 
 
 if __name__ == '__main__':
@@ -136,47 +149,59 @@ if __name__ == '__main__':
     bagWeight = 150
 
     # 生成items&系列bag
-    objs = items(iWeight, iPrice)
+    objs = Items(iWeight, iPrice)
     bags = []
-    for r in range(objs.getWeight(objs.getNext(0)), bagWeight + 1, objs.delta):
-        bgIdx = (r - objs.getWeight(objs.getNext(0))) / objs.delta  # todo:待测试
-        bags.append(bag(r, objs.sum, bgIdx))  # todo:待测试
+    bg_idx = 0
+    for r in range(objs.get_weight(objs.get_by_order(0)), bagWeight + 1, objs.delta):
+        bags.append(Bag(r, objs.sum, bg_idx))
+        bg_idx += 1
+    bg_idx = None
 
     # 包内的第ii件物品(第ii轮)
     for r in range(objs.sum):
         # 第一轮，不需要和前一轮做比较
         if r == 0:
             for bg in bags:
-                tempIdx = compareitems(bg, objs)
-                if tempIdx != -1:
-                    bg.addItem(tempIdx, objs.getWeight(tempIdx), objs.getPrice(tempIdx))
+                temp_idx = compare_items_in_bag(bg, objs)
+                bg.add_item(temp_idx, objs.get_weight(temp_idx), objs.get_price(temp_idx))
         else:
-            # bagToFill = range(len(bags))  # 还未装满的
-            # bagForFill = range(len(bags))  # 可能成为装满其他包的解决方案的包
+            item_to_add = []  # 记录每一轮要修改的所有包的值，格式为（包号，垫脚石包号，新增物品号）
             for bg in bags:
-                if not bg.isFull():
-                    tempIdxArray = []  # 存储待选项(背包号，物品号)
+                tempIdxArray = []  # 存储待选项(背包号，物品号)
+                if not bg.is_full:
                     # todo:直接在自己包内加东西
-                    tempIdx = compareitems(bg, objs, bg.getSelectable())
-                    if tempIdx != -1:
-                        tempIdxArray.append((bg.bgidx, tempIdx))
-                # 其他包情况
-                for bgIdx in bg.bgselectable:
-                    tempIdx = compareitems2(bags[bgIdx], objs, bg)
-                    if tempIdx == -1:
-                        bg.bgSelectable.remove(bgIdx)
-                    else:
-                        tempIdxArray.append((bgIdx, tempIdx))
-                if len(tempIdxArray) > 0:
-                    tempPrice = bg.totalPrice
-                    for temp in tempIdxArray:
-                        if objs.getPrice(temp[1]) + bags[temp[0]].totalPrice > tempPrice:
-                            if bg is bags[temp[0]]:
-                                bg.addItem(temp[1], objs.getWeight(temp[1]), objs.getPrice(temp[1]))
+                    temp_idx = compare_items_in_bag(bg, objs, bg.selectable)
+                    if temp_idx != -1:
+                        tempIdxArray.append((bg.bag_idx, temp_idx))
+                    # 其他包情况
+                    if len(bg.bag_selectable) > 0:
+                        ext_selectable = bg.bag_selectable[:]
+                        for bag_index in ext_selectable:
+                            temp_idx = compare_items_among_bags(bags[bag_index], objs, bg)
+                            if temp_idx == -1:
+                                bg.bag_selectable.remove(bag_index)
                             else:
-                                bg.addItem(temp[1], objs.getWeight(temp[1]), objs.getPrice(temp[1]), bags[temp[0]])
+                                tempIdxArray.append((bag_index, temp_idx))
+                    if len(tempIdxArray) > 0:
+                        temp_price = bg.total_price
+                        temp_idx = -1
+                        for temp in tempIdxArray:
+                            if objs.get_price(temp[1]) + bags[temp[0]].total_price > temp_price:
+                                temp_idx = temp  # 元组
+                                temp_price = objs.get_price(temp[1]) + bags[temp[0]].total_price
+                        if temp_idx != -1:
+                            item_to_add.append((bg.bag_idx, temp_idx[0], temp_idx[1]))
+                        else:
+                            bg.is_full = True
+            for record in item_to_add:
+                if record[0] == record[1]:
+                    bags[record[0]].add_item(record[2], objs.get_weight(record[2]), objs.get_price(record[2]))
+                else:
+                    bags[record[0]].add_item(record[2], objs.get_weight(record[2]), objs.get_price(record[2]),
+                                             bags[record[1]])
     # 输出结果
     print "the bag of" + str(bagWeight) + " should contains:"
+    string_out = ""
     for elm in bags[-1].items:
-        print str(elm + 1) + ","
-    print "\n its total price is" + str(bags[-1].totalPrice) + "!\n"
+        string_out += str(elm + 1) + ","
+    print string_out + "\n its total price is" + str(bags[-1].total_price) + "!\n"
