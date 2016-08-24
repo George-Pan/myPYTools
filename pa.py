@@ -103,6 +103,57 @@ def compare_items(bag, items, target_bag=None):
     return temp_index
 
 
+def solve(weight_array, value_array, bag_weight):
+    """
+    :param weight_array:重量列表
+    :param value_array: 价值列表
+    :param bag_weight: 包重
+    :return:包列表
+    """
+    # 生成items&系列bag
+    objs = Items(weight_array, value_array)
+    bgs = []
+    bg_idx = 0
+    for r in range(objs.get_weight(objs.idx[0]), bag_weight + 1, objs.delta):
+        bgs.append(Bag(r, bg_idx))
+        bg_idx += 1
+    bg_idx = None
+
+    # 包内的第ii件物品(第ii轮)
+    for r in range(objs.sum + 1):
+        item_to_add = []  # 记录每一轮要修改的所有包的值，格式为（包号，垫脚石包号，新增物品号）
+        for bg in bgs:
+            temp_idx_array = []  # 存储待选项(背包号，物品号)
+            if bg.is_useful:
+                # 直接在自己包内加东西
+                temp_idx = compare_items(bg, objs)
+                if temp_idx != -1:
+                    temp_idx_array.append((bg.bag_idx, temp_idx))
+                if r != 0:  # 其他包情况
+                    for ii in range(bg.bag_idx):
+                        if bgs[ii].is_full and len(bgs[ii].items) == r:
+                            temp_idx = compare_items(bgs[ii], objs, bg)
+                            if temp_idx != -1:
+                                temp_idx_array.append((ii, temp_idx))
+                if len(temp_idx_array) > 0:
+                    temp_price = bg.total_price
+                    temp_idx = -1
+                    for temp in temp_idx_array:
+                        if objs.get_price(temp[1]) + bgs[temp[0]].total_price > temp_price:
+                            temp_idx = temp  # 元组
+                            temp_price = objs.get_price(temp[1]) + bgs[temp[0]].total_price
+                    if temp_idx != -1:
+                        item_to_add.append((bg.bag_idx, temp_idx[0], temp_idx[1]))
+                elif not bg.is_full:
+                    bg.is_useful = False
+        for record in item_to_add:
+            if record[0] == record[1]:
+                bgs[record[0]].add_item(record[2], objs)
+            else:
+                bgs[record[0]].add_item(record[2], objs, bgs[record[1]])
+    return bgs
+
+
 if __name__ == '__main__':
 
     # todo：转为控制台输入
@@ -113,54 +164,15 @@ if __name__ == '__main__':
     # iPrice = [60,100,120]
     # bagWeight = 50
 
-    # 生成items&系列bag
-    objs = Items(iWeight, iPrice)
-    bags = []
-    bg_idx = 0
-    for r in range(objs.get_weight(objs.idx[0]), bagWeight + 1, objs.delta):
-        bags.append(Bag(r, bg_idx))
-        bg_idx += 1
-    bg_idx = None
-
-    # 包内的第ii件物品(第ii轮)
-    for r in range(objs.sum + 1):
-        item_to_add = []  # 记录每一轮要修改的所有包的值，格式为（包号，垫脚石包号，新增物品号）
-        for bg in bags:
-            tempIdxArray = []  # 存储待选项(背包号，物品号)
-            if bg.is_useful:
-                # 直接在自己包内加东西
-                temp_idx = compare_items(bg, objs)
-                if temp_idx != -1:
-                    tempIdxArray.append((bg.bag_idx, temp_idx))
-                if r != 0:  # 其他包情况
-                    for i in range(bg.bag_idx):
-                        if bags[i].is_full and len(bags[i].items) == r:
-                            temp_idx = compare_items(bags[i], objs, bg)
-                            if temp_idx != -1:
-                                tempIdxArray.append((i, temp_idx))
-                if len(tempIdxArray) > 0:
-                    temp_price = bg.total_price
-                    temp_idx = -1
-                    for temp in tempIdxArray:
-                        if objs.get_price(temp[1]) + bags[temp[0]].total_price > temp_price:
-                            temp_idx = temp  # 元组
-                            temp_price = objs.get_price(temp[1]) + bags[temp[0]].total_price
-                    if temp_idx != -1:
-                        item_to_add.append((bg.bag_idx, temp_idx[0], temp_idx[1]))
-                elif not bg.is_full:
-                    bg.is_useful = False
-        for record in item_to_add:
-            if record[0] == record[1]:
-                bags[record[0]].add_item(record[2], objs)
-            else:
-                bags[record[0]].add_item(record[2], objs, bags[record[1]])
+    bags = solve(iWeight, iPrice, bagWeight)
     # 输出结果
     print "The useful bags I have: "
     string_out = ""
-    for bg in bags:
-        if bg.is_useful:
-            string_out += "Bag" + str(bg.total_weight) + ":"
-            for i in bg.items:
+    for bag in bags:
+        if bag.is_useful:
+            string_out += "Bag" + str(bag.total_weight) + ":"
+            for i in bag\
+                    .items:
                 string_out += str(i + 1) + ","
-            string_out += "\nits total price is " + str(bg.total_price) + "!\n"
+            string_out += "\nits total price is " + str(bag.total_price) + "!\n"
     print string_out
